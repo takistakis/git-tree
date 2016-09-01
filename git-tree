@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+
+# Copyright 2016 Panagiotis Ktistakis <panktist@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""List files tracked by git in a tree-like format."""
+
+import os
+import subprocess
+import sys
+
+__version__ = '0.1.0'
+
+MARKER = '<files>'
+
+
+def ls_files():
+    """Get the list of files tracked by git."""
+    try:
+        output = subprocess.check_output(['git', 'ls-files'])
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+    files = [file for file in output.split(b'\n') if file != b'']
+    # Try to properly decode escaped unicode characters.  For example a file
+    # called ä.txt, is shown as "\303\244.txt" in the output of `git ls-files`,
+    # and ends up as b'"\\303\\244.txt"'.  I'd like an easier way to do that.
+    # b'"\\303\\244.txt"' -> b'\\303\\244.txt'
+    files = [file.strip(b'"') for file in files]
+    # b'\\303\\244.txt' -> b'\xc3\xa4.txt'
+    files = [file.decode('unicode_escape').encode('latin1') for file in files]
+    # b'\xc3\xa4.txt' -> 'ä.txt'
+    files = [file.decode('utf-8') for file in files]
+    return files
+
+
+def list_to_dict(files):
+    """Convert a list of file paths to a dict.
+
+    Files inside a directory are represented by a list of filenames using
+    `MARKER` as key.  Directories are represented by nested dicts, using the
+    directory name as key.
+
+    >>> list_to_dict([
+    ...     'dir1/file1',
+    ...     'dir1/dir2/file2',
+    ...     'dir1/dir2/file3',
+    ...     'file4',
+    ... ]) == {
+    ...     'dir1': {
+    ...         'dir2': {
+    ...             '<files>': ['file2', 'file3'],
+    ...         },
+    ...         '<files>': ['file1'],
+    ...     },
+    ...     '<files>': ['file4'],
+    ... }
+    True
+    """
+
+    def _add(path, tree):
+        """Add a file at the right depth of the tree dict."""
+        if '/' in path:
+            head, tail = path.split('/', 1)
+            if head not in tree:
+                tree[head] = {MARKER: []}
+            _add(tail, tree[head])
+        else:
+            tree[MARKER].append(path)
+
+    tree = {MARKER: []}
+    for path in files:
+        _add(path, tree)
+    return tree
+
+
+def get_colors():
+    """Turn the LS_COLORS environment variable into a dict."""
+    colors = {}
+    ls_colors = os.environ.get('LS_COLORS', '').split(':')
+    ls_colors = [line.lstrip('*') for line in ls_colors]
+    for line in ls_colors:
+        if line != '':
+            ext, color = line.split('=')
+            colors[ext] = color
+    return colors
+
+
+def colorize(path, colors):
+    """Check file type and add the appropriate color."""
+
+    def _color(name, filetype):
+        """Add color to `name` according to its type."""
+        if filetype in colors:
+            return '\033[{}m{}\033[0m'.format(colors[filetype], name)
+        else:
+            return name
+
+    def _filetype(path):
+        """Return the filetype of the given file."""
+        extension = os.path.splitext(path)[1]
+
+        if os.path.islink(path):
+            if os.path.exists(path):    # Good symlink
+                filetype = 'ln'
+            else:                       # Dangling symlink
+                filetype = 'or'
+        elif os.path.isdir(path):       # Directory
+            filetype = 'di'
+        elif not os.path.isfile(path):  # Non-existent file
+            filetype = 'mi'
+        elif os.access(path, os.X_OK):  # Executable
+            filetype = 'ex'
+        elif extension:                 # Known extension
+            filetype = extension
+        else:                           # Normal file (default)
+            filetype = 'fi'
+
+        return filetype
+
+    basename = os.path.basename(path)
+    filetype = _filetype(path)
+
+    if filetype in ('ln', 'or'):
+        target = os.readlink(path)
+        dirname = os.path.dirname(path)
+        targetpath = os.path.join(dirname, target)
+        targettype = _filetype(targetpath)
+        if targettype in ('ln', 'or'):
+            targettype = ''
+        left = _color(basename, filetype)
+        right = _color(target, targettype)
+        return '{} -> {}'.format(left, right)
+
+    return _color(basename, filetype)
+
+
+def print_tree(tree, colors, dirname='', prev=''):
+    """Print the file tree structure clearly showing the hierarchy.
+
+    Args:
+        tree: A subtree of the root tree to print.
+        colors: A 'type/extension' -> 'ansi color code' dict.
+        dirname: The path from the working directory up to the subtree.
+        prev: Tree branches to print left of the subtree.
+    """
+
+    if dirname == '':
+        print(colorize('.', colors))
+
+    dirs = [key for key in tree if key != MARKER]
+    files = tree[MARKER]
+    # Sort files and directories together case-insensitive
+    nodes = sorted(dirs + files, key=str.lower)
+
+    none = prev + '    '
+    line = prev + '│   '
+    turn = prev + '└── '
+    join = prev + '├── '
+
+    # All nodes except the last
+    for node in nodes[:-1]:
+        path = os.path.join(dirname, node)
+        print(join + colorize(path, colors))
+        if node in tree:
+            print_tree(tree[node], colors, path, line)
+
+    # Last node
+    node = nodes[-1]
+    path = os.path.join(dirname, node)
+    print(turn + colorize(path, colors))
+    if node in tree:
+        print_tree(tree[node], colors, path, none)
+
+
+def main():
+    """Get files tacked by git, create tree and print it."""
+    files = ls_files()
+    tree = list_to_dict(files)
+    colors = get_colors()
+    print_tree(tree, colors)
+
+
+if __name__ == '__main__':
+    main()
