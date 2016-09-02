@@ -26,10 +26,10 @@ __version__ = '0.1.0'
 MARKER = '<files>'
 
 
-def ls_files():
+def ls_files(args):
     """Get the list of files tracked by git."""
     try:
-        output = subprocess.check_output(['git', 'ls-files'])
+        output = subprocess.check_output(['git', 'ls-files'] + args)
     except subprocess.CalledProcessError:
         sys.exit(1)
     files = [file for file in output.split(b'\n') if file != b'']
@@ -57,6 +57,7 @@ def list_to_dict(files):
     ...     'dir1/dir2/file2',
     ...     'dir1/dir2/file3',
     ...     'file4',
+    ...     'dir3/',
     ... ]) == {
     ...     'dir1': {
     ...         'dir2': {
@@ -65,6 +66,9 @@ def list_to_dict(files):
     ...         '<files>': ['file1'],
     ...     },
     ...     '<files>': ['file4'],
+    ...     'dir3': {
+    ...         '<files>': [],
+    ...     },
     ... }
     True
     """
@@ -75,7 +79,8 @@ def list_to_dict(files):
             head, tail = path.split('/', 1)
             if head not in tree:
                 tree[head] = {MARKER: []}
-            _add(tail, tree[head])
+            if tail:
+                _add(tail, tree[head])
         else:
             tree[MARKER].append(path)
 
@@ -163,6 +168,9 @@ def print_tree(tree, colors, dirname='', prev=''):
     files = tree[MARKER]
     # Sort files and directories together case-insensitive
     nodes = sorted(dirs + files, key=str.lower)
+    # Stop here if the directory is empty (possible with --directory)
+    if not nodes:
+        return
 
     none = prev + '    '
     line = prev + '│   '
@@ -186,7 +194,7 @@ def print_tree(tree, colors, dirname='', prev=''):
 
 def main():
     """Get files tacked by git, create tree and print it."""
-    files = ls_files()
+    files = ls_files(sys.argv[1:])
     tree = list_to_dict(files)
     colors = get_colors()
     print_tree(tree, colors)
