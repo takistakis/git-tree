@@ -15,7 +15,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""List files tracked by git in a tree-like format."""
+"""
+Usage: git tree [options]
+
+List files tracked by git in a tree-like format.
+
+Given options apart from the ones described below, are passed to `git
+ls-files` as is.  Check `git ls-files --help` for more information.
+
+Options:
+  --color/--no-color  Whether or not to show colored output.  If
+                      omitted, only use color when writing to the
+                      terminal.
+  -v, --version       Show version and exit.
+  -h, --help          Show this help message and exit.
+"""
 
 import os
 import subprocess
@@ -24,6 +38,32 @@ import sys
 __version__ = '0.1.0'
 
 MARKER = '<files>'
+
+
+def parse_args():
+    """Parse arguments and remove them from sys.argv.
+
+    If an eager option is given, print accordingly and exit.  Otherwise return
+    whether output will be colored.  If not explicitly specified, only use
+    color when writing to the terminal (i.e. not piping to another program).
+    """
+    color = None
+    for arg in list(sys.argv[1:]):
+        if arg == '--color':
+            color = True
+            sys.argv.remove(arg)
+        elif arg == '--no-color':
+            color = False
+            sys.argv.remove(arg)
+        elif arg in ('-h', '--help'):
+            print(__doc__)
+            sys.exit()
+        elif arg in ('-v', '--version'):
+            print(__version__)
+            sys.exit()
+    if color is None:
+        color = True if sys.stdout.isatty() else False
+    return color
 
 
 def ls_files(args):
@@ -194,10 +234,14 @@ def print_tree(tree, colors, dirname='', prev=''):
 
 def main():
     """Get files tacked by git, create tree and print it."""
+    color = parse_args()
     files = ls_files(sys.argv[1:])
     tree = list_to_dict(files)
-    colors = get_colors()
-    print_tree(tree, colors)
+    if color:
+        colors = get_colors()
+        print_tree(tree, colors)
+    else:
+        print_tree(tree, {})
 
 
 if __name__ == '__main__':
