@@ -237,11 +237,8 @@ def main():
     color = parse_args()
     files = ls_files(sys.argv[1:])
     tree = list_to_dict(files)
-    if color:
-        colors = get_colors()
-        print_tree(tree, colors)
-    else:
-        print_tree(tree, {})
+    colors = get_colors() if color else {}
+    print_tree(tree, colors)
 
 
 if __name__ == '__main__':
