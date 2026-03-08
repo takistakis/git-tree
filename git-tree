@@ -35,9 +35,9 @@ import os
 import subprocess
 import sys
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"
 
-MARKER = '<files>'
+MARKER = "<files>"
 
 
 def parse_args():
@@ -49,16 +49,16 @@ def parse_args():
     """
     color = None
     for arg in list(sys.argv[1:]):
-        if arg == '--color':
+        if arg == "--color":
             color = True
             sys.argv.remove(arg)
-        elif arg == '--no-color':
+        elif arg == "--no-color":
             color = False
             sys.argv.remove(arg)
-        elif arg in ('-h', '--help'):
+        elif arg in ("-h", "--help"):
             print(__doc__)
             sys.exit()
-        elif arg in ('-v', '--version'):
+        elif arg in ("-v", "--version"):
             print(__version__)
             sys.exit()
     if color is None:
@@ -69,19 +69,19 @@ def parse_args():
 def ls_files(args):
     """Get the list of files tracked by git."""
     try:
-        output = subprocess.check_output(['git', 'ls-files'] + args)
+        output = subprocess.check_output(["git", "ls-files"] + args)
     except subprocess.CalledProcessError:
         sys.exit(1)
-    files = [file for file in output.split(b'\n') if file != b'']
+    files = [file for file in output.split(b"\n") if file != b""]
     # Try to properly decode escaped unicode characters.  For example a file
     # called ä.txt, is shown as "\303\244.txt" in the output of `git ls-files`,
     # and ends up as b'"\\303\\244.txt"'.  I'd like an easier way to do that.
     # b'"\\303\\244.txt"' -> b'\\303\\244.txt'
     files = [file.strip(b'"') for file in files]
     # b'\\303\\244.txt' -> b'\xc3\xa4.txt'
-    files = [file.decode('unicode_escape').encode('latin1') for file in files]
+    files = [file.decode("unicode_escape").encode("latin1") for file in files]
     # b'\xc3\xa4.txt' -> 'ä.txt'
-    files = [file.decode('utf-8') for file in files]
+    files = [file.decode("utf-8") for file in files]
     return files
 
 
@@ -115,8 +115,8 @@ def list_to_dict(files):
 
     def _add(path, tree):
         """Add a file at the right depth of the tree dict."""
-        if '/' in path:
-            head, tail = path.split('/', 1)
+        if "/" in path:
+            head, tail = path.split("/", 1)
             if head not in tree:
                 tree[head] = {MARKER: []}
             if tail:
@@ -133,11 +133,11 @@ def list_to_dict(files):
 def get_colors():
     """Turn the LS_COLORS environment variable into a dict."""
     colors = {}
-    ls_colors = os.environ.get('LS_COLORS', '').split(':')
-    ls_colors = [line.lstrip('*') for line in ls_colors]
+    ls_colors = os.environ.get("LS_COLORS", "").split(":")
+    ls_colors = [line.lstrip("*") for line in ls_colors]
     for line in ls_colors:
-        if line != '':
-            ext, color = line.split('=')
+        if line != "":
+            ext, color = line.split("=")
             colors[ext] = color
     return colors
 
@@ -148,7 +148,7 @@ def colorize(path, colors):
     def _color(name, filetype):
         """Add color to `name` according to its type."""
         if filetype in colors:
-            return '\033[{}m{}\033[0m'.format(colors[filetype], name)
+            return "\033[{}m{}\033[0m".format(colors[filetype], name)
         else:
             return name
 
@@ -157,41 +157,41 @@ def colorize(path, colors):
         extension = os.path.splitext(path)[1]
 
         if os.path.islink(path):
-            if os.path.exists(path):    # Good symlink
-                filetype = 'ln'
-            else:                       # Dangling symlink
-                filetype = 'or'
-        elif os.path.isdir(path):       # Directory
-            filetype = 'di'
+            if os.path.exists(path):  # Good symlink
+                filetype = "ln"
+            else:  # Dangling symlink
+                filetype = "or"
+        elif os.path.isdir(path):  # Directory
+            filetype = "di"
         elif not os.path.isfile(path):  # Non-existent file
-            filetype = 'mi'
+            filetype = "mi"
         elif os.access(path, os.X_OK):  # Executable
-            filetype = 'ex'
-        elif extension:                 # Known extension
+            filetype = "ex"
+        elif extension:  # Known extension
             filetype = extension
-        else:                           # Normal file (default)
-            filetype = 'fi'
+        else:  # Normal file (default)
+            filetype = "fi"
 
         return filetype
 
     basename = os.path.basename(path)
     filetype = _filetype(path)
 
-    if filetype in ('ln', 'or'):
+    if filetype in ("ln", "or"):
         target = os.readlink(path)
         dirname = os.path.dirname(path)
         targetpath = os.path.join(dirname, target)
         targettype = _filetype(targetpath)
-        if targettype in ('ln', 'or'):
-            targettype = ''
+        if targettype in ("ln", "or"):
+            targettype = ""
         left = _color(basename, filetype)
         right = _color(target, targettype)
-        return '{} -> {}'.format(left, right)
+        return "{} -> {}".format(left, right)
 
     return _color(basename, filetype)
 
 
-def print_tree(tree, colors, dirname='', prev=''):
+def print_tree(tree, colors, dirname="", prev=""):
     """Print the file tree structure clearly showing the hierarchy.
 
     Args:
@@ -201,8 +201,8 @@ def print_tree(tree, colors, dirname='', prev=''):
         prev: Tree branches to print left of the subtree.
     """
 
-    if dirname == '':
-        print(colorize('.', colors))
+    if dirname == "":
+        print(colorize(".", colors))
 
     dirs = [key for key in tree if key != MARKER]
     files = tree[MARKER]
@@ -212,10 +212,10 @@ def print_tree(tree, colors, dirname='', prev=''):
     if not nodes:
         return
 
-    none = prev + '    '
-    line = prev + '│   '
-    turn = prev + '└── '
-    join = prev + '├── '
+    none = prev + "    "
+    line = prev + "│   "
+    turn = prev + "└── "
+    join = prev + "├── "
 
     # All nodes except the last
     for node in nodes[:-1]:
@@ -241,5 +241,5 @@ def main():
     print_tree(tree, colors)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
