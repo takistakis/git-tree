@@ -38,6 +38,11 @@ from typing import Any
 __version__ = "0.1.0"
 
 MARKER = "<files>"
+DEFAULT_LS_COLORS = (
+    "di=01;34:ln=01;36:or=01;31:ex=01;32:"
+    "*.tar=01;31:*.tgz=01;31:*.zip=01;31:*.gz=01;31:*.bz2=01;31:"
+    "*.jpg=01;35:*.jpeg=01;35:*.png=01;35:*.gif=01;35"
+)
 
 
 def parse_args() -> bool:
@@ -132,9 +137,9 @@ def list_to_dict(files: list[str]) -> dict[str, Any]:
 
 
 def get_colors() -> dict[str, str]:
-    """Turn the LS_COLORS environment variable into a dict."""
+    """Turn LS_COLORS, or sensible defaults, into a dict."""
     colors = {}
-    ls_colors = os.environ.get("LS_COLORS", "").split(":")
+    ls_colors = os.environ.get("LS_COLORS", DEFAULT_LS_COLORS).split(":")
     ls_colors = [line.lstrip("*") for line in ls_colors]
     for line in ls_colors:
         if line != "":
