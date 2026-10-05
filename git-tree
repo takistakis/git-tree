@@ -48,19 +48,26 @@ def parse_args() -> bool:
     color when writing to the terminal (i.e. not piping to another program).
     """
     color = None
-    for arg in list(sys.argv[1:]):
+    args = sys.argv[1:]
+    git_args = []
+    for index, arg in enumerate(args):
+        if arg == "--":
+            git_args.extend(args[index:])
+            break
         if arg == "--color":
             color = True
-            sys.argv.remove(arg)
         elif arg == "--no-color":
             color = False
-            sys.argv.remove(arg)
         elif arg in ("-h", "--help"):
             print(__doc__)
             sys.exit()
         elif arg in ("-v", "--version"):
             print(__version__)
             sys.exit()
+        else:
+            git_args.append(arg)
+
+    sys.argv[1:] = git_args
 
     if color is None:
         color = sys.stdout.isatty()
@@ -71,20 +78,11 @@ def parse_args() -> bool:
 def ls_files(args: list[str]) -> list[str]:
     """Get the list of files tracked by git."""
     try:
-        output = subprocess.check_output(["git", "ls-files"] + args)
+        output = subprocess.check_output(["git", "ls-files", "-z"] + args)
     except subprocess.CalledProcessError:
         sys.exit(1)
 
-    files = [file for file in output.split(b"\n") if file != b""]
-    # Try to properly decode escaped unicode characters.  For example a file
-    # called ä.txt, is shown as "\303\244.txt" in the output of `git ls-files`,
-    # and ends up as b'"\\303\\244.txt"'.  I'd like an easier way to do that.
-    # b'"\\303\\244.txt"' -> b'\\303\\244.txt'
-    files = [file.strip(b'"') for file in files]
-    # b'\\303\\244.txt' -> b'\xc3\xa4.txt'
-    files = [file.decode("unicode_escape").encode("latin1") for file in files]
-    # b'\xc3\xa4.txt' -> 'ä.txt'
-    return [file.decode("utf-8") for file in files]
+    return [os.fsdecode(file) for file in output.split(b"\0") if file]
 
 
 def list_to_dict(files: list[str]) -> dict[str, Any]:
