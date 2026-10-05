@@ -15,8 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""
-Usage: git tree [options]
+"""Usage: git tree [options]
 
 List files tracked by git in a tree-like format.
 
@@ -34,13 +33,14 @@ Options:
 import os
 import subprocess
 import sys
+from typing import Any
 
 __version__ = "0.1.0"
 
 MARKER = "<files>"
 
 
-def parse_args():
+def parse_args() -> bool:
     """Parse arguments and remove them from sys.argv.
 
     If an eager option is given, print accordingly and exit.  Otherwise return
@@ -61,17 +61,20 @@ def parse_args():
         elif arg in ("-v", "--version"):
             print(__version__)
             sys.exit()
+
     if color is None:
-        color = True if sys.stdout.isatty() else False
+        color = sys.stdout.isatty()
+
     return color
 
 
-def ls_files(args):
+def ls_files(args: list[str]) -> list[str]:
     """Get the list of files tracked by git."""
     try:
         output = subprocess.check_output(["git", "ls-files"] + args)
     except subprocess.CalledProcessError:
         sys.exit(1)
+
     files = [file for file in output.split(b"\n") if file != b""]
     # Try to properly decode escaped unicode characters.  For example a file
     # called ä.txt, is shown as "\303\244.txt" in the output of `git ls-files`,
@@ -81,11 +84,10 @@ def ls_files(args):
     # b'\\303\\244.txt' -> b'\xc3\xa4.txt'
     files = [file.decode("unicode_escape").encode("latin1") for file in files]
     # b'\xc3\xa4.txt' -> 'ä.txt'
-    files = [file.decode("utf-8") for file in files]
-    return files
+    return [file.decode("utf-8") for file in files]
 
 
-def list_to_dict(files):
+def list_to_dict(files: list[str]) -> dict[str, Any]:
     """Convert a list of file paths to a dict.
 
     Files inside a directory are represented by a list of filenames using
@@ -113,7 +115,7 @@ def list_to_dict(files):
     True
     """
 
-    def _add(path, tree):
+    def _add(path: str, tree: dict) -> None:
         """Add a file at the right depth of the tree dict."""
         if "/" in path:
             head, tail = path.split("/", 1)
@@ -124,13 +126,14 @@ def list_to_dict(files):
         else:
             tree[MARKER].append(path)
 
-    tree = {MARKER: []}
+    tree: dict[str, Any] = {MARKER: []}
     for path in files:
         _add(path, tree)
+
     return tree
 
 
-def get_colors():
+def get_colors() -> dict[str, str]:
     """Turn the LS_COLORS environment variable into a dict."""
     colors = {}
     ls_colors = os.environ.get("LS_COLORS", "").split(":")
@@ -142,17 +145,16 @@ def get_colors():
     return colors
 
 
-def colorize(path, colors):
+def colorize(path: str, colors: dict[str, str]) -> str:
     """Check file type and add the appropriate color."""
 
-    def _color(name, filetype):
+    def _color(name: str, filetype: str) -> str:
         """Add color to `name` according to its type."""
         if filetype in colors:
-            return "\033[{}m{}\033[0m".format(colors[filetype], name)
-        else:
-            return name
+            return f"\033[{colors[filetype]}m{name}\033[0m"
+        return name
 
-    def _filetype(path):
+    def _filetype(path: str) -> str:
         """Return the filetype of the given file."""
         extension = os.path.splitext(path)[1]
 
@@ -186,12 +188,17 @@ def colorize(path, colors):
             targettype = ""
         left = _color(basename, filetype)
         right = _color(target, targettype)
-        return "{} -> {}".format(left, right)
+        return f"{left} -> {right}"
 
     return _color(basename, filetype)
 
 
-def print_tree(tree, colors, dirname="", prev=""):
+def print_tree(
+    tree: dict[str, Any],
+    colors: dict[str, str],
+    dirname: str = "",
+    prev: str = "",
+) -> None:
     """Print the file tree structure clearly showing the hierarchy.
 
     Args:
@@ -199,8 +206,8 @@ def print_tree(tree, colors, dirname="", prev=""):
         colors: A 'type/extension' -> 'ansi color code' dict.
         dirname: The path from the working directory up to the subtree.
         prev: Tree branches to print left of the subtree.
-    """
 
+    """
     if dirname == "":
         print(colorize(".", colors))
 
@@ -232,7 +239,7 @@ def print_tree(tree, colors, dirname="", prev=""):
         print_tree(tree[node], colors, path, none)
 
 
-def main():
+def main() -> None:
     """Get files tacked by git, create tree and print it."""
     color = parse_args()
     files = ls_files(sys.argv[1:])
